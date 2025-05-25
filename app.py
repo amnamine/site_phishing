@@ -3,16 +3,21 @@ import numpy as np
 import pandas as pd
 import re
 from urllib.parse import urlparse
-from tensorflow.keras.models import load_model
-from sklearn.preprocessing import StandardScaler
 import tldextract
+import tensorflow as tf
+from sklearn.preprocessing import StandardScaler
 
 app = Flask(__name__)
 
-# Load the trained model and scaler
-model = load_model('dnn2.h5')
+# Load TFLite model and allocate tensors
+interpreter = tf.lite.Interpreter(model_path="dnn2.tflite")
+interpreter.allocate_tensors()
 
-# Dummy dataset to re-fit the scaler structure
+# Get input and output details
+input_details = interpreter.get_input_details()
+output_details = interpreter.get_output_details()
+
+# Load and prepare scaler
 data = pd.read_csv('dataset_phishing.csv')
 data['status'] = data['status'].map({'legitimate': 0, 'phishing': 1})
 data_features = data.drop(['url', 'status'], axis=1)
@@ -87,12 +92,17 @@ def home():
 @app.route('/predict', methods=['POST'])
 def predict():
     try:
-        url = request.json['url']
+        url = request.json.get('url', '')
         if not url:
             return jsonify({'error': 'Please enter a URL'}), 400
         
-        features = extract_features(url)
-        prediction = model.predict(features)[0][0]
+        features = extract_features(url).astype(np.float32)  # TFLite needs float32 input
+        
+        interpreter.set_tensor(input_details[0]['index'], features)
+        interpreter.invoke()
+        
+        output_data = interpreter.get_tensor(output_details[0]['index'])
+        prediction = output_data[0][0]
         
         result = {
             'is_phishing': bool(prediction > 0.5),
@@ -105,4 +115,4 @@ def predict():
         return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=8080, debug=True) 
+    app.run(host='0.0.0.0', port=8080, debug=True)
