@@ -11,26 +11,26 @@ app = Flask(__name__)
 
 # Load all TFLite models
 models = {
-    'dnn2': {
-        'interpreter': tf.lite.Interpreter(model_path='dnn2.tflite'),
+    'model1': {
+        'interpreter': tf.lite.Interpreter(model_path='model1.tflite'),
         'scaler': None,
         'data_features': None
     },
-    'ds2': {
-        'interpreter': tf.lite.Interpreter(model_path='ds2.tflite'),
+    'model2': {
+        'interpreter': tf.lite.Interpreter(model_path='model2.tflite'),
         'scaler': StandardScaler()
     },
-    'ds4': {
-        'interpreter': tf.lite.Interpreter(model_path='ds4.tflite')
+    'model3': {
+        'interpreter': tf.lite.Interpreter(model_path='model3.tflite')
     }
 }
 
 # Initialize all models
 for model_name, model_data in models.items():
     model_data['interpreter'].allocate_tensors()
-    if model_name == 'dnn2':
-        # Load dataset and prepare scaler for dnn2
-        data = pd.read_csv('dataset_phishing.csv')
+    if model_name == 'model1':
+        # Load dataset and prepare scaler for model1
+        data = pd.read_csv('dataset1.csv')
         data['status'] = data['status'].map({'legitimate': 0, 'phishing': 1})
         model_data['data_features'] = data.drop(['url', 'status'], axis=1)
         model_data['scaler'] = StandardScaler()
@@ -45,7 +45,7 @@ model_details = {
     for name, model in models.items()
 }
 
-def extract_features_dnn2(url):
+def extract_features_model1(url):
     parsed = urlparse(url)
     ext = tldextract.extract(url)
     domain = ext.domain.lower()
@@ -103,11 +103,11 @@ def extract_features_dnn2(url):
         'avg_word_path': np.mean([len(w) for w in parsed.path.split('/')]) if parsed.path else 0
     }
 
-    aligned_features = [features[col] if col in features else 0 for col in models['dnn2']['data_features'].columns]
-    scaled = models['dnn2']['scaler'].transform([aligned_features])
+    aligned_features = [features[col] if col in features else 0 for col in models['model1']['data_features'].columns]
+    scaled = models['model1']['scaler'].transform([aligned_features])
     return scaled
 
-def extract_features_ds2(url):
+def extract_features_model2(url):
     ext = tldextract.extract(url)
     domain = ext.domain + "." + ext.suffix if ext.suffix else ext.domain
     subdomain = ext.subdomain
@@ -179,11 +179,11 @@ def extract_features_ds2(url):
             df.drop(columns=col, inplace=True)
     
     dummy_input = pd.DataFrame(np.zeros((1, df.shape[1])), columns=df.columns)
-    models['ds2']['scaler'].fit(dummy_input)
-    scaled_input = models['ds2']['scaler'].transform(df)
+    models['model2']['scaler'].fit(dummy_input)
+    scaled_input = models['model2']['scaler'].transform(df)
     return scaled_input.astype(np.float32)
 
-def extract_features_ds4(url):
+def extract_features_model3(url):
     url = url.strip()
     url_length = len(url)
     url_digits = sum(c.isdigit() for c in url)
@@ -245,12 +245,12 @@ def predict():
         url = re.sub(r'^https://', '', url, flags=re.IGNORECASE)
 
         # Extract features based on selected model
-        if model_name == 'dnn2':
-            features = extract_features_dnn2(url)
-        elif model_name == 'ds2':
-            features = extract_features_ds2(url)
-        else:  # ds4
-            features = extract_features_ds4(url)
+        if model_name == 'model1':
+            features = extract_features_model1(url)
+        elif model_name == 'model2':
+            features = extract_features_model2(url)
+        else:  # model3
+            features = extract_features_model3(url)
 
         # Get model details
         model = models[model_name]
