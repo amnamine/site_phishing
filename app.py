@@ -3,30 +3,52 @@ import numpy as np
 import pandas as pd
 import re
 from urllib.parse import urlparse
-import tldextract
 import tensorflow as tf
 from sklearn.preprocessing import StandardScaler
+import tldextract
 
 app = Flask(__name__)
 
-# Load TFLite model and allocate tensors
-interpreter = tf.lite.Interpreter(model_path="dnn2.tflite")
-interpreter.allocate_tensors()
+# Load all TFLite models
+models = {
+    'dnn2': {
+        'interpreter': tf.lite.Interpreter(model_path='dnn2.tflite'),
+        'scaler': None,
+        'data_features': None
+    },
+    'ds2': {
+        'interpreter': tf.lite.Interpreter(model_path='ds2.tflite'),
+        'scaler': StandardScaler()
+    },
+    'ds4': {
+        'interpreter': tf.lite.Interpreter(model_path='ds4.tflite')
+    }
+}
 
-# Get input and output details
-input_details = interpreter.get_input_details()
-output_details = interpreter.get_output_details()
+# Initialize all models
+for model_name, model_data in models.items():
+    model_data['interpreter'].allocate_tensors()
+    if model_name == 'dnn2':
+        # Load dataset and prepare scaler for dnn2
+        data = pd.read_csv('dataset_phishing.csv')
+        data['status'] = data['status'].map({'legitimate': 0, 'phishing': 1})
+        model_data['data_features'] = data.drop(['url', 'status'], axis=1)
+        model_data['scaler'] = StandardScaler()
+        model_data['scaler'].fit(model_data['data_features'])
 
-# Load and prepare scaler
-data = pd.read_csv('dataset_phishing.csv')
-data['status'] = data['status'].map({'legitimate': 0, 'phishing': 1})
-data_features = data.drop(['url', 'status'], axis=1)
-scaler = StandardScaler()
-scaler.fit(data_features)
+# Get input/output details for all models
+model_details = {
+    name: {
+        'input': model['interpreter'].get_input_details(),
+        'output': model['interpreter'].get_output_details()
+    }
+    for name, model in models.items()
+}
 
-def extract_features(url):
+def extract_features_dnn2(url):
     parsed = urlparse(url)
     ext = tldextract.extract(url)
+    domain = ext.domain.lower()
     
     features = {
         'length_url': len(url),
@@ -81,9 +103,101 @@ def extract_features(url):
         'avg_word_path': np.mean([len(w) for w in parsed.path.split('/')]) if parsed.path else 0
     }
 
-    aligned_features = [features[col] if col in features else 0 for col in data_features.columns]
-    scaled = scaler.transform([aligned_features])
+    aligned_features = [features[col] if col in features else 0 for col in models['dnn2']['data_features'].columns]
+    scaled = models['dnn2']['scaler'].transform([aligned_features])
     return scaled
+
+def extract_features_ds2(url):
+    ext = tldextract.extract(url)
+    domain = ext.domain + "." + ext.suffix if ext.suffix else ext.domain
+    subdomain = ext.subdomain
+
+    url_len = len(url)
+    domain_len = len(domain)
+    tld_len = len(ext.suffix)
+    no_of_subdomains = subdomain.count('.') + 1 if subdomain else 0
+    no_of_letters = len(re.findall(r'[a-zA-Z]', url))
+    no_of_digits = len(re.findall(r'\d', url))
+    no_of_special = len(re.findall(r'[^a-zA-Z0-9]', url))
+
+    features = {
+        "URLLength": url_len,
+        "DomainLength": domain_len,
+        "IsDomainIP": int(re.match(r'^\d{1,3}(\.\d{1,3}){3}$', domain) is not None),
+        "URLSimilarityIndex": 100,
+        "CharContinuationRate": 1,
+        "TLDLegitimateProb": 0.5,
+        "URLCharProb": 0.05,
+        "TLDLength": tld_len,
+        "NoOfSubDomain": no_of_subdomains,
+        "HasObfuscation": 0,
+        "NoOfObfuscatedChar": 0,
+        "ObfuscationRatio": 0,
+        "NoOfLettersInURL": no_of_letters,
+        "LetterRatioInURL": no_of_letters / url_len if url_len else 0,
+        "NoOfDegitsInURL": no_of_digits,
+        "DegitRatioInURL": no_of_digits / url_len if url_len else 0,
+        "NoOfEqualsInURL": url.count('='),
+        "NoOfQMarkInURL": url.count('?'),
+        "NoOfAmpersandInURL": url.count('&'),
+        "NoOfOtherSpecialCharsInURL": len(re.findall(r'[^\w\d\-._~:/?#\[\]@!$&\'()*+,;=]', url)),
+        "SpacialCharRatioInURL": no_of_special / url_len if url_len else 0,
+        "IsHTTPS": int(url.startswith("https")),
+        "LineOfCode": 1000,
+        "LargestLineLength": 1000,
+        "HasTitle": 1,
+        "DomainTitleMatchScore": 0.5,
+        "URLTitleMatchScore": 0.5,
+        "HasFavicon": 1,
+        "Robots": 1,
+        "IsResponsive": 1,
+        "NoOfURLRedirect": 0,
+        "NoOfSelfRedirect": 0,
+        "HasDescription": 1,
+        "NoOfPopup": 0,
+        "NoOfiFrame": 0,
+        "HasExternalFormSubmit": 0,
+        "HasSocialNet": 0,
+        "HasSubmitButton": 1,
+        "HasHiddenFields": 0,
+        "HasPasswordField": 1,
+        "Bank": 0,
+        "Pay": 0,
+        "Crypto": 0,
+        "HasCopyrightInfo": 1,
+        "NoOfImage": 10,
+        "NoOfCSS": 5,
+        "NoOfJS": 10,
+        "NoOfSelfRef": 20,
+        "NoOfEmptyRef": 0,
+        "NoOfExternalRef": 10
+    }
+
+    df = pd.DataFrame([features])
+    for col in df.columns:
+        if df[col].dtype == object:
+            df.drop(columns=col, inplace=True)
+    
+    dummy_input = pd.DataFrame(np.zeros((1, df.shape[1])), columns=df.columns)
+    models['ds2']['scaler'].fit(dummy_input)
+    scaled_input = models['ds2']['scaler'].transform(df)
+    return scaled_input.astype(np.float32)
+
+def extract_features_ds4(url):
+    url = url.strip()
+    url_length = len(url)
+    url_digits = sum(c.isdigit() for c in url)
+    url_letters = sum(c.isalpha() for c in url)
+    url_specials = sum(not c.isalnum() for c in url)
+
+    # For missing 6 features, fill zeros
+    extra_features = [0] * 6
+
+    # Combine all features in the correct order
+    features = [url_length, url_digits, url_letters, url_specials] + extra_features
+
+    # Convert to numpy array with shape (1, 10)
+    return np.array([features], dtype=np.float32)
 
 @app.route('/')
 def home():
@@ -92,27 +206,71 @@ def home():
 @app.route('/predict', methods=['POST'])
 def predict():
     try:
-        url = request.json.get('url', '')
+        url = request.json['url']
+        model_name = request.json['model']
+        
         if not url:
             return jsonify({'error': 'Please enter a URL'}), 400
-        
-        features = extract_features(url).astype(np.float32)  # TFLite needs float32 input
-        
-        interpreter.set_tensor(input_details[0]['index'], features)
-        interpreter.invoke()
-        
-        output_data = interpreter.get_tensor(output_details[0]['index'])
-        prediction = output_data[0][0]
-        
+            
+        if model_name not in models:
+            return jsonify({'error': 'Invalid model selected'}), 400
+
+        ext = tldextract.extract(url)
+        domain = ext.domain.lower()
+        whitelist = ['google', 'apple', 'facebook', 'microsoft', 'amazon', 'microsoftonline']
+        if domain in whitelist:
+            result = {
+                'is_phishing': False,
+                'confidence': 1.0,
+                'message': 'Legitimate ✅'
+            }
+            return jsonify(result)
+
+        if '@' in url:
+            result = {
+                'is_phishing': True,
+                'confidence': 1.0,
+                'message': 'Phishing ⚠️ (présence de \'@\' dans l\'URL)'
+            }
+            return jsonify(result)
+
+        if '0' in domain or '__' in domain:
+            result = {
+                'is_phishing': True,
+                'confidence': 1.0,
+                'message': 'Phishing ⚠️'
+            }
+            return jsonify(result)
+
+        url = re.sub(r'^https://', '', url, flags=re.IGNORECASE)
+
+        # Extract features based on selected model
+        if model_name == 'dnn2':
+            features = extract_features_dnn2(url)
+        elif model_name == 'ds2':
+            features = extract_features_ds2(url)
+        else:  # ds4
+            features = extract_features_ds4(url)
+
+        # Get model details
+        model = models[model_name]
+        input_details = model_details[model_name]['input']
+        output_details = model_details[model_name]['output']
+
+        # Make prediction
+        model['interpreter'].set_tensor(input_details[0]['index'], features.astype(np.float32))
+        model['interpreter'].invoke()
+        prediction = model['interpreter'].get_tensor(output_details[0]['index'])[0][0]
+
         result = {
             'is_phishing': bool(prediction > 0.5),
             'confidence': float(prediction),
             'message': 'Phishing ⚠️' if prediction > 0.5 else 'Legitimate ✅'
         }
         return jsonify(result)
-    
+
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=8080, debug=True)
+    app.run(host='0.0.0.0', port=8080, debug=True) 
