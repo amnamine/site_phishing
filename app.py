@@ -185,29 +185,93 @@ def extract_features_model2(url):
 
 # List of final feature columns for model3
 final_feature_columns = [
-    'URL_LENGTH',
-    'URL_DIGITS',
-    'URL_LETTERS',
-    'URL_SPECIALS',
-    'FEATURE_5',
-    'FEATURE_6',
-    'FEATURE_7',
-    'FEATURE_8',
-    'FEATURE_9',
-    'FEATURE_10'
+    "ID",
+    "DOMAIN_NAME",
+    "TS_RATE_CALC",
+    "IP",
+    "WHOIS_NAME",
+    "WHOIS_ORG",
+    "WHOIS_REGISTRAR",
+    "CERT_ISSUER",
+    "ROOT_DOMAIN",
+    "SECOND_DOMAIN",
+    "SUBDOMAINS_COUNT",
+    "DOMAIN_LENGTH",
+    "DOMAIN_AGE",
+    "DNS_MX_COUNT",
+    "DNS_TXT_COUNT",
+    "DNS_A_COUNT",
+    "DNS_NS_COUNT",
+    "DNS_CNAME_COUNT",
+    "FAVICON",
+    "SYMS_DIGS",
+    "SYMS_DASH",
+    "SYMS_VOWELS",
+    "SYMS_CONSONANTS"
 ]
 
-def extract_features_model3(url):
-    url = url.strip()
-    url_length = len(url)
-    url_digits = sum(c.isdigit() for c in url)
-    url_letters = sum(c.isalpha() for c in url)
-    url_specials = sum(not c.isalnum() for c in url)
+def count_vowels(text):
+    vowels = 'aeiouAEIOU'
+    return sum(1 for char in text if char in vowels)
 
-    # For missing 6 features, fill zeros for now
-    extra_features = [0] * (len(final_feature_columns) - 4)
-    features = [url_length, url_digits, url_letters, url_specials] + extra_features
-    return np.array([features], dtype=np.float32)
+def count_consonants(text):
+    consonants = 'bcdfghjklmnpqrstvwxyzBCDFGHJKLMNPQRSTVWXYZ'
+    return sum(1 for char in text if char in consonants)
+
+def extract_features_model3(url):
+    try:
+        # Parse URL
+        parsed_url = urlparse(url)
+        domain = parsed_url.netloc
+        
+        # Basic domain features
+        domain_length = len(domain)
+        syms_digs = sum(c.isdigit() for c in domain)
+        syms_dash = domain.count('-')
+        syms_vowels = count_vowels(domain)
+        syms_consonants = count_consonants(domain)
+        
+        # Domain parts
+        parts = domain.split('.')
+        root_domain = parts[-1] if len(parts) > 0 else ''
+        second_domain = parts[-2] if len(parts) > 1 else ''
+        subdomains_count = len(parts) - 2 if len(parts) > 2 else 0
+        
+        # Initialize features with default values
+        features = {
+            "ID": 0,
+            "DOMAIN_NAME": domain,
+            "TS_RATE_CALC": 0,
+            "IP": 0,
+            "WHOIS_NAME": 0,
+            "WHOIS_ORG": 0,
+            "WHOIS_REGISTRAR": 0,
+            "CERT_ISSUER": 0,
+            "ROOT_DOMAIN": 1 if root_domain else 0,
+            "SECOND_DOMAIN": 1 if second_domain else 0,
+            "SUBDOMAINS_COUNT": subdomains_count,
+            "DOMAIN_LENGTH": domain_length,
+            "DOMAIN_AGE": 0,
+            "DNS_MX_COUNT": 0,
+            "DNS_TXT_COUNT": 0,
+            "DNS_A_COUNT": 0,
+            "DNS_NS_COUNT": 0,
+            "DNS_CNAME_COUNT": 0,
+            "FAVICON": 0,
+            "SYMS_DIGS": syms_digs,
+            "SYMS_DASH": syms_dash,
+            "SYMS_VOWELS": syms_vowels,
+            "SYMS_CONSONANTS": syms_consonants
+        }
+        
+        # Convert features to array in the correct order
+        feature_array = [features[col] for col in final_feature_columns[:-1]]  # Exclude IS_PHISHING
+        return np.array([feature_array], dtype=np.float32)
+        
+    except Exception as e:
+        print(f"Error extracting features: {e}")
+        # Return zero array if feature extraction fails
+        return np.zeros((1, len(final_feature_columns)-1), dtype=np.float32)
 
 @app.route('/')
 def home():
