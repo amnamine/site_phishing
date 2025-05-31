@@ -17,7 +17,7 @@
         justify-content: center;
       }
       .container {
-        max-width: 600px;
+        max-width: 800px;
         background: white;
         padding: 2rem;
         border-radius: 10px;
@@ -45,22 +45,22 @@
       .btn-reset {
         margin-left: 10px;
       }
-      .model-select {
+      .model-result {
         margin-bottom: 1rem;
+        padding: 0.5rem;
+        border-radius: 5px;
+      }
+      .majority-result {
+        margin-top: 1.5rem;
+        padding: 1rem;
+        border-radius: 5px;
+        font-weight: bold;
       }
     </style>
   </head>
   <body>
     <div class="container">
       <h1 class="text-center mb-4">Phishing URL Detector</h1>
-      <div class="model-select">
-        <label for="modelSelect" class="form-label">Select Model:</label>
-        <select id="modelSelect" class="form-select">
-          <option value="model1">Model 1</option>
-          <option value="model2">Model 2</option>
-          <option value="model3">Model 3</option>
-        </select>
-      </div>
       <div class="form-group">
         <input
           type="url"
@@ -87,18 +87,17 @@
         <p class="mt-2">Analyzing URL...</p>
       </div>
       <div id="result" class="result-box">
-        <h4 id="resultMessage" class="text-center"></h4>
-        <p id="confidence" class="text-center mb-0"></p>
+        <div id="modelResults"></div>
+        <div id="majorityResult" class="majority-result"></div>
       </div>
     </div>
 
     <script>
       async function checkUrl() {
         const urlInput = document.getElementById("urlInput");
-        const modelSelect = document.getElementById("modelSelect");
         const result = document.getElementById("result");
-        const resultMessage = document.getElementById("resultMessage");
-        const confidence = document.getElementById("confidence");
+        const modelResults = document.getElementById("modelResults");
+        const majorityResult = document.getElementById("majorityResult");
         const loading = document.getElementById("loading");
 
         if (!urlInput.value) {
@@ -118,20 +117,46 @@
             },
             body: JSON.stringify({
               url: urlInput.value,
-              model: modelSelect.value,
             }),
           });
 
           const data = await response.json();
 
           if (response.ok) {
-            result.className = `result-box ${
-              data.is_phishing ? "phishing" : "legitimate"
-            }`;
-            resultMessage.textContent = data.message;
-            confidence.textContent = `Confidence: ${(
-              data.confidence * 100
-            ).toFixed(2)}%`;
+            // Display individual model results
+            modelResults.innerHTML = "";
+            for (const [modelName, modelData] of Object.entries(
+              data.model_results
+            )) {
+              const resultClass = modelData.is_phishing
+                ? "phishing"
+                : "legitimate";
+              const resultDiv = document.createElement("div");
+              resultDiv.className = `model-result ${resultClass}`;
+              resultDiv.innerHTML = `
+                <strong>${modelName}:</strong> ${
+                modelData.is_phishing ? "Phishing ⚠️" : "Legitimate ✅"
+              }
+                <br>Confidence: ${(modelData.confidence * 100).toFixed(2)}%
+              `;
+              modelResults.appendChild(resultDiv);
+            }
+
+            // Display majority result
+            const majorityClass = data.majority_result.is_phishing
+              ? "phishing"
+              : "legitimate";
+            majorityResult.className = `majority-result ${majorityClass}`;
+            majorityResult.innerHTML = `
+              <h4 class="text-center">Majority Decision</h4>
+              <p class="text-center mb-0">
+                ${data.majority_result.message}<br>
+                Confidence: ${(data.majority_result.confidence * 100).toFixed(
+                  2
+                )}%
+              </p>
+            `;
+
             result.style.display = "block";
           } else {
             alert(data.error || "An error occurred");

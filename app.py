@@ -217,65 +217,105 @@ def home():
 def predict():
     try:
         url = request.json['url']
-        model_name = request.json['model']
         
         if not url:
             return jsonify({'error': 'Please enter a URL'}), 400
-            
-        if model_name not in models:
-            return jsonify({'error': 'Invalid model selected'}), 400
 
         ext = tldextract.extract(url)
         domain = ext.domain.lower()
         whitelist = ['google', 'apple', 'facebook', 'microsoft', 'amazon', 'microsoftonline']
         if domain in whitelist:
             result = {
-                'is_phishing': False,
-                'confidence': 1.0,
-                'message': 'Legitimate ✅'
+                'model_results': {
+                    'model1': {'is_phishing': False, 'confidence': 1.0},
+                    'model2': {'is_phishing': False, 'confidence': 1.0},
+                    'model3': {'is_phishing': False, 'confidence': 1.0}
+                },
+                'majority_result': {
+                    'is_phishing': False,
+                    'confidence': 1.0,
+                    'message': 'Legitimate ✅ (Whitelisted domain)'
+                }
             }
             return jsonify(result)
 
         if '@' in url:
             result = {
-                'is_phishing': True,
-                'confidence': 1.0,
-                'message': 'Phishing ⚠️ (présence de \'@\' dans l\'URL)'
+                'model_results': {
+                    'model1': {'is_phishing': True, 'confidence': 1.0},
+                    'model2': {'is_phishing': True, 'confidence': 1.0},
+                    'model3': {'is_phishing': True, 'confidence': 1.0}
+                },
+                'majority_result': {
+                    'is_phishing': True,
+                    'confidence': 1.0,
+                    'message': 'Phishing ⚠️ (présence de \'@\' dans l\'URL)'
+                }
             }
             return jsonify(result)
 
         if '0' in domain or '__' in domain:
             result = {
-                'is_phishing': True,
-                'confidence': 1.0,
-                'message': 'Phishing ⚠️'
+                'model_results': {
+                    'model1': {'is_phishing': True, 'confidence': 1.0},
+                    'model2': {'is_phishing': True, 'confidence': 1.0},
+                    'model3': {'is_phishing': True, 'confidence': 1.0}
+                },
+                'majority_result': {
+                    'is_phishing': True,
+                    'confidence': 1.0,
+                    'message': 'Phishing ⚠️'
+                }
             }
             return jsonify(result)
 
         url = re.sub(r'^https://', '', url, flags=re.IGNORECASE)
 
-        # Extract features based on selected model
-        if model_name == 'model1':
-            features = extract_features_model1(url)
-        elif model_name == 'model2':
-            features = extract_features_model2(url)
-        else:  # model3
-            features = extract_features_model3(url)
+        # Get predictions from all models
+        model_results = {}
+        phishing_votes = 0
+        total_confidence = 0
 
-        # Get model details
-        model = models[model_name]
-        input_details = model_details[model_name]['input']
-        output_details = model_details[model_name]['output']
+        for model_name in ['model1', 'model2', 'model3']:
+            # Extract features based on model
+            if model_name == 'model1':
+                features = extract_features_model1(url)
+            elif model_name == 'model2':
+                features = extract_features_model2(url)
+            else:  # model3
+                features = extract_features_model3(url)
 
-        # Make prediction
-        model['interpreter'].set_tensor(input_details[0]['index'], features.astype(np.float32))
-        model['interpreter'].invoke()
-        prediction = model['interpreter'].get_tensor(output_details[0]['index'])[0][0]
+            # Get model details
+            model = models[model_name]
+            input_details = model_details[model_name]['input']
+            output_details = model_details[model_name]['output']
+
+            # Make prediction
+            model['interpreter'].set_tensor(input_details[0]['index'], features.astype(np.float32))
+            model['interpreter'].invoke()
+            prediction = model['interpreter'].get_tensor(output_details[0]['index'])[0][0]
+
+            is_phishing = bool(prediction > 0.5)
+            if is_phishing:
+                phishing_votes += 1
+            total_confidence += prediction
+
+            model_results[model_name] = {
+                'is_phishing': is_phishing,
+                'confidence': float(prediction)
+            }
+
+        # Calculate majority result
+        majority_is_phishing = phishing_votes >= 2
+        avg_confidence = total_confidence / 3
 
         result = {
-            'is_phishing': bool(prediction > 0.5),
-            'confidence': float(prediction),
-            'message': 'Phishing ⚠️' if prediction > 0.5 else 'Legitimate ✅'
+            'model_results': model_results,
+            'majority_result': {
+                'is_phishing': majority_is_phishing,
+                'confidence': float(avg_confidence),
+                'message': 'Phishing ⚠️' if majority_is_phishing else 'Legitimate ✅'
+            }
         }
         return jsonify(result)
 
