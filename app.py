@@ -183,6 +183,20 @@ def extract_features_model2(url):
     scaled_input = models['model2']['scaler'].transform(df)
     return scaled_input.astype(np.float32)
 
+# List of final feature columns for model3
+final_feature_columns = [
+    'URL_LENGTH',
+    'URL_DIGITS',
+    'URL_LETTERS',
+    'URL_SPECIALS',
+    'FEATURE_5',
+    'FEATURE_6',
+    'FEATURE_7',
+    'FEATURE_8',
+    'FEATURE_9',
+    'FEATURE_10'
+]
+
 def extract_features_model3(url):
     url = url.strip()
     url_length = len(url)
@@ -190,13 +204,9 @@ def extract_features_model3(url):
     url_letters = sum(c.isalpha() for c in url)
     url_specials = sum(not c.isalnum() for c in url)
 
-    # For missing 6 features, fill zeros
-    extra_features = [0] * 6
-
-    # Combine all features in the correct order
+    # For missing 6 features, fill zeros for now
+    extra_features = [0] * (len(final_feature_columns) - 4)
     features = [url_length, url_digits, url_letters, url_specials] + extra_features
-
-    # Convert to numpy array with shape (1, 10)
     return np.array([features], dtype=np.float32)
 
 @app.route('/')
