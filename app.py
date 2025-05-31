@@ -220,58 +220,32 @@ def count_consonants(text):
 
 def extract_features_model3(url):
     try:
-        # Parse URL
         parsed_url = urlparse(url)
         domain = parsed_url.netloc
-        
-        # Basic domain features
+        parts = domain.split('.')
         domain_length = len(domain)
+        subdomains_count = len(parts) - 2 if len(parts) > 2 else 0
         syms_digs = sum(c.isdigit() for c in domain)
         syms_dash = domain.count('-')
         syms_vowels = count_vowels(domain)
         syms_consonants = count_consonants(domain)
-        
-        # Domain parts
-        parts = domain.split('.')
-        root_domain = parts[-1] if len(parts) > 0 else ''
-        second_domain = parts[-2] if len(parts) > 1 else ''
-        subdomains_count = len(parts) - 2 if len(parts) > 2 else 0
-        
-        # Initialize features with default values
-        features = {
-            "ID": 0,
-            "DOMAIN_NAME": domain,
-            "TS_RATE_CALC": 0,
-            "IP": 0,
-            "WHOIS_NAME": 0,
-            "WHOIS_ORG": 0,
-            "WHOIS_REGISTRAR": 0,
-            "CERT_ISSUER": 0,
-            "ROOT_DOMAIN": 1 if root_domain else 0,
-            "SECOND_DOMAIN": 1 if second_domain else 0,
-            "SUBDOMAINS_COUNT": subdomains_count,
-            "DOMAIN_LENGTH": domain_length,
-            "DOMAIN_AGE": 0,
-            "DNS_MX_COUNT": 0,
-            "DNS_TXT_COUNT": 0,
-            "DNS_A_COUNT": 0,
-            "DNS_NS_COUNT": 0,
-            "DNS_CNAME_COUNT": 0,
-            "FAVICON": 0,
-            "SYMS_DIGS": syms_digs,
-            "SYMS_DASH": syms_dash,
-            "SYMS_VOWELS": syms_vowels,
-            "SYMS_CONSONANTS": syms_consonants
-        }
-        
-        # Convert features to array in the correct order
-        feature_array = [features[col] for col in final_feature_columns[:-1]]  # Exclude IS_PHISHING
+        # Only 10 numeric features for model3
+        feature_array = [
+            domain_length,         # 1
+            subdomains_count,      # 2
+            syms_digs,             # 3
+            syms_dash,             # 4
+            syms_vowels,           # 5
+            syms_consonants,       # 6
+            0,                    # 7 - stubbed (e.g. DOMAIN_AGE)
+            0,                    # 8 - stubbed (e.g. DNS_MX_COUNT)
+            0,                    # 9 - stubbed (e.g. DNS_A_COUNT)
+            0                     # 10 - stubbed (e.g. FAVICON)
+        ]
         return np.array([feature_array], dtype=np.float32)
-        
     except Exception as e:
         print(f"Error extracting features: {e}")
-        # Return zero array if feature extraction fails
-        return np.zeros((1, len(final_feature_columns)-1), dtype=np.float32)
+        return np.zeros((1, 10), dtype=np.float32)
 
 @app.route('/')
 def home():
