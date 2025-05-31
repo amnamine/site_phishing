@@ -226,53 +226,31 @@ def predict():
         whitelist = ['google', 'apple', 'facebook', 'microsoft', 'amazon', 'microsoftonline']
         if domain in whitelist:
             result = {
-                'model_results': {
-                    'model1': {'is_phishing': False, 'confidence': 1.0},
-                    'model2': {'is_phishing': False, 'confidence': 1.0},
-                    'model3': {'is_phishing': False, 'confidence': 1.0}
-                },
-                'majority_result': {
-                    'is_phishing': False,
-                    'confidence': 1.0,
-                    'message': 'Legitimate ✅ (Whitelisted domain)'
-                }
+                'is_phishing': False,
+                'confidence': 1.0,
+                'message': 'Majority: Legitimate ✅'
             }
             return jsonify(result)
 
         if '@' in url:
             result = {
-                'model_results': {
-                    'model1': {'is_phishing': True, 'confidence': 1.0},
-                    'model2': {'is_phishing': True, 'confidence': 1.0},
-                    'model3': {'is_phishing': True, 'confidence': 1.0}
-                },
-                'majority_result': {
-                    'is_phishing': True,
-                    'confidence': 1.0,
-                    'message': 'Phishing ⚠️ (présence de \'@\' dans l\'URL)'
-                }
+                'is_phishing': True,
+                'confidence': 1.0,
+                'message': 'Majority: Phishing ⚠️ (présence de \'@\' dans l\'URL)'
             }
             return jsonify(result)
 
         if '0' in domain or '__' in domain:
             result = {
-                'model_results': {
-                    'model1': {'is_phishing': True, 'confidence': 1.0},
-                    'model2': {'is_phishing': True, 'confidence': 1.0},
-                    'model3': {'is_phishing': True, 'confidence': 1.0}
-                },
-                'majority_result': {
-                    'is_phishing': True,
-                    'confidence': 1.0,
-                    'message': 'Phishing ⚠️'
-                }
+                'is_phishing': True,
+                'confidence': 1.0,
+                'message': 'Majority: Phishing ⚠️'
             }
             return jsonify(result)
 
         url = re.sub(r'^https://', '', url, flags=re.IGNORECASE)
 
         # Get predictions from all models
-        model_results = {}
         phishing_votes = 0
         total_confidence = 0
 
@@ -295,27 +273,18 @@ def predict():
             model['interpreter'].invoke()
             prediction = model['interpreter'].get_tensor(output_details[0]['index'])[0][0]
 
-            is_phishing = bool(prediction > 0.5)
-            if is_phishing:
+            if prediction > 0.5:
                 phishing_votes += 1
             total_confidence += prediction
-
-            model_results[model_name] = {
-                'is_phishing': is_phishing,
-                'confidence': float(prediction)
-            }
 
         # Calculate majority result
         majority_is_phishing = phishing_votes >= 2
         avg_confidence = total_confidence / 3
 
         result = {
-            'model_results': model_results,
-            'majority_result': {
-                'is_phishing': majority_is_phishing,
-                'confidence': float(avg_confidence),
-                'message': 'Phishing ⚠️' if majority_is_phishing else 'Legitimate ✅'
-            }
+            'is_phishing': majority_is_phishing,
+            'confidence': float(avg_confidence),
+            'message': 'Majority: Phishing ⚠️' if majority_is_phishing else 'Majority: Legitimate ✅'
         }
         return jsonify(result)
 
